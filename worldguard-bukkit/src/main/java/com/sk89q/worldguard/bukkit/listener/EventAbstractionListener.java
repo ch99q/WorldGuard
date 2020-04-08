@@ -911,6 +911,8 @@ public class EventAbstractionListener extends AbstractListener {
     public void onInventoryMoveItem(InventoryMoveItemEvent event) {
         final InventoryHolder causeHolder = event.getInitiator().getHolder();
 
+        if (causeHolder instanceof Hopper || causeHolder instanceof HopperMinecart) return;
+
         if (causeHolder instanceof Hopper
                 && getWorldConfig(BukkitAdapter.adapt((((Hopper) causeHolder).getWorld()))).ignoreHopperMoveEvents) {
             return;
