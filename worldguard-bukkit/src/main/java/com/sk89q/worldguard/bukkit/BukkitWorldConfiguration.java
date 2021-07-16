@@ -40,7 +40,7 @@ import com.sk89q.worldguard.chest.ChestProtection;
 import com.sk89q.worldguard.commands.CommandUtils;
 import com.sk89q.worldguard.config.YamlWorldConfiguration;
 import org.bukkit.potion.PotionEffectType;
-import org.yaml.snakeyaml.parser.ParserException;
+import org.yaml.snakeyaml.error.YAMLException;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -105,6 +105,13 @@ public class BukkitWorldConfiguration extends YamlWorldConfiguration {
 
         if (inputs == null || inputs.isEmpty()) {
             parentConfig.setProperty(node, new ArrayList<String>());
+        }
+
+        if (config.getProperty(node) != null) {
+            inputs = config.getStringList(node, null);
+        }
+
+        if (inputs == null || inputs.isEmpty()) {
             return set;
         }
 
@@ -128,7 +135,7 @@ public class BukkitWorldConfiguration extends YamlWorldConfiguration {
             config.load();
         } catch (IOException e) {
             log.log(Level.SEVERE, "Error reading configuration for world " + worldName + ": ", e);
-        } catch (ParserException e) {
+        } catch (YAMLException e) {
             log.severe("Error parsing configuration for world " + worldName + ". ");
             throw e;
         }
@@ -144,6 +151,7 @@ public class BukkitWorldConfiguration extends YamlWorldConfiguration {
         allowAllInteract = getTargetMatchers("event-handling.interaction-whitelist");
         blockUseAtFeet = getTargetMatchers("event-handling.emit-block-use-at-feet");
         ignoreHopperMoveEvents = getBoolean("event-handling.ignore-hopper-item-move-events", false);
+        breakDeniedHoppers = getBoolean("event-handling.break-hoppers-on-denied-move", true);
 
         usePaperEntityOrigin = getBoolean("regions.use-paper-entity-origin", false);
 
@@ -151,6 +159,8 @@ public class BukkitWorldConfiguration extends YamlWorldConfiguration {
         removeInfiniteStacks = getBoolean("protection.remove-infinite-stacks", false);
         disableExpDrops = getBoolean("protection.disable-xp-orb-drops", false);
         disableObsidianGenerators = getBoolean("protection.disable-obsidian-generators", false);
+
+        useMaxPriorityAssociation = getBoolean("protection.use-max-priority-association", false);
 
         blockPotions = new HashSet<>();
         for (String potionName : getStringList("gameplay.block-potions", null)) {
@@ -208,6 +218,7 @@ public class BukkitWorldConfiguration extends YamlWorldConfiguration {
         blockGroundSlimes = getBoolean("mobs.block-above-ground-slimes", false);
         blockOtherExplosions = getBoolean("mobs.block-other-explosions", false);
         blockZombieDoorDestruction = getBoolean("mobs.block-zombie-door-destruction", false);
+        blockEntityVehicleEntry = getBoolean("mobs.block-vehicle-entry", false);
 
         disableFallDamage = getBoolean("player-damage.disable-fall-damage", false);
         disableLavaDamage = getBoolean("player-damage.disable-lava-damage", false);
@@ -230,6 +241,9 @@ public class BukkitWorldConfiguration extends YamlWorldConfiguration {
         disableCreatureCropTrampling = getBoolean("crops.disable-creature-trampling", false);
         disablePlayerCropTrampling = getBoolean("crops.disable-player-trampling", false);
 
+        disableCreatureTurtleEggTrampling = getBoolean("turtle-egg.disable-creature-trampling", false);
+        disablePlayerTurtleEggTrampling = getBoolean("turtle-egg.disable-player-trampling", false);
+
         disallowedLightningBlocks = new HashSet<>(convertLegacyBlocks(getStringList("weather.prevent-lightning-strike-blocks", null)));
         preventLightningFire = getBoolean("weather.disable-lightning-strike-fire", false);
         disableThunder = getBoolean("weather.disable-thunderstorm", false);
@@ -251,6 +265,7 @@ public class BukkitWorldConfiguration extends YamlWorldConfiguration {
         disableVineGrowth = getBoolean("dynamics.disable-vine-growth", false);
         disableCropGrowth = getBoolean("dynamics.disable-crop-growth", false);
         disableSoilDehydration = getBoolean("dynamics.disable-soil-dehydration", false);
+        disableCoralBlockFade = getBoolean("dynamics.disable-coral-block-fade", false);
         allowedSnowFallOver = new HashSet<>(convertLegacyBlocks(getStringList("dynamics.snow-fall-blocks", null)));
 
         useRegions = getBoolean("regions.enable", true);

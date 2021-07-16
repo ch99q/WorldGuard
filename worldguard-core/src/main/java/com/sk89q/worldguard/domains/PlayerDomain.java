@@ -73,7 +73,9 @@ public class PlayerDomain implements Domain, ChangeTracked {
      * Add the given player to the domain, identified by the player's name.
      *
      * @param name the name of the player
+     * @deprecated names are deprecated in favor of UUIDs in MC 1.7+
      */
+    @Deprecated
     public void addPlayer(String name) {
         checkNotNull(name);
         if (!name.trim().isEmpty()) {
@@ -111,7 +113,9 @@ public class PlayerDomain implements Domain, ChangeTracked {
      * Remove the given player from the domain, identified by the player's name.
      *
      * @param name the name of the player
+     * @deprecated names are deprecated in favor of UUIDs in MC 1.7+
      */
+    @Deprecated
     public void removePlayer(String name) {
         checkNotNull(name);
         setDirty(true);
@@ -145,14 +149,16 @@ public class PlayerDomain implements Domain, ChangeTracked {
     @Override
     public boolean contains(LocalPlayer player) {
         checkNotNull(player);
-        return contains(player.getName().trim().toLowerCase()) || contains(player.getUniqueId());
+        return contains(player.getUniqueId()) || (!names.isEmpty() && contains(player.getName()));
     }
 
     /**
      * Get the set of player names.
      *
      * @return the set of player names
+     * @deprecated names are deprecated in favor of UUIDs in MC 1.7+
      */
+    @Deprecated
     public Set<String> getPlayers() {
         return Collections.unmodifiableSet(names);
     }

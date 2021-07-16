@@ -36,6 +36,8 @@ import org.bukkit.entity.TNTPrimed;
 import org.bukkit.entity.Tameable;
 import org.bukkit.entity.Vehicle;
 import org.bukkit.metadata.Metadatable;
+import org.bukkit.projectiles.BlockProjectileSource;
+import org.bukkit.projectiles.ProjectileSource;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -88,26 +90,15 @@ public final class Cause {
     }
 
     /**
-     * Return whether a cause is known. This method will return true if
-     * the list of causes is empty or the list of causes only contains
-     * objects that really are not root causes (i.e primed TNT).
+     * Return whether a cause is known. This method will return false if
+     * the list of causes is empty or the root cause is really not known
+     * (e.g. primed TNT).
      *
      * @return true if known
      */
     public boolean isKnown() {
-        if (causes.isEmpty()) {
-            return false;
-        }
-
-        boolean found = false;
-        for (Object object : causes) {
-            if (!(object instanceof TNTPrimed) && !(object instanceof Vehicle)) {
-                found = true;
-                break;
-            }
-        }
-
-        return found;
+        Object object = getRootCause();
+        return !(object == null || object instanceof TNTPrimed || object instanceof Vehicle);
     }
 
     @Nullable
@@ -269,13 +260,15 @@ public final class Cause {
                     if (o instanceof TNTPrimed) {
                         addAll(((TNTPrimed) o).getSource());
                     } else if (o instanceof Projectile) {
-                        addAll(((Projectile) o).getShooter());
-                    } else if (o instanceof Firework && PaperLib.isPaper()) {
-                        UUID spawningUUID = ((Firework) o).getSpawningEntity();
-                        if (spawningUUID != null) {
-                            Entity spawningEntity = Bukkit.getEntity(spawningUUID);
-                            if (spawningEntity != null) {
-                                addAll(spawningEntity);
+                        ProjectileSource shooter = ((Projectile) o).getShooter();
+                        addAll(shooter);
+                        if (shooter == null && o instanceof Firework && PaperLib.isPaper()) {
+                            UUID spawningUUID = ((Firework) o).getSpawningEntity();
+                            if (spawningUUID != null) {
+                                Entity spawningEntity = Bukkit.getEntity(spawningUUID);
+                                if (spawningEntity != null) {
+                                    addAll(spawningEntity);
+                                }
                             }
                         }
                     } else if (o instanceof Vehicle) {
@@ -283,12 +276,14 @@ public final class Cause {
                     } else if (o instanceof AreaEffectCloud) {
                         indirect = true;
                         addAll(((AreaEffectCloud) o).getSource());
-                    } else if (o instanceof Creature && ((Creature) o).getTarget() != null) {
-                        indirect = true;
-                        addAll(((Creature) o).getTarget());
                     } else if (o instanceof Tameable) {
                         indirect = true;
                         addAll(((Tameable) o).getOwner());
+                    } else if (o instanceof Creature && ((Creature) o).getTarget() != null) {
+                        indirect = true;
+                        addAll(((Creature) o).getTarget());
+                    } else if (o instanceof BlockProjectileSource) {
+                        addAll(((BlockProjectileSource) o).getBlock());
                     }
 
                     // Add manually tracked parent causes

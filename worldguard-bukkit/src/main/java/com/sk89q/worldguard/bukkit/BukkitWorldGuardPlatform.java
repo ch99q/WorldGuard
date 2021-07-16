@@ -31,7 +31,7 @@ import com.sk89q.worldguard.LocalPlayer;
 import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
-import com.sk89q.worldguard.util.profile.resolver.PaperProfileService;
+import com.sk89q.worldguard.util.profile.resolver.PaperPlayerService;
 import com.sk89q.worldguard.bukkit.protection.events.flags.FlagContextCreateEvent;
 import com.sk89q.worldguard.bukkit.session.BukkitSessionManager;
 import com.sk89q.worldguard.bukkit.util.report.PerformanceReport;
@@ -67,7 +67,7 @@ import java.util.stream.Collectors;
 
 public class BukkitWorldGuardPlatform implements WorldGuardPlatform {
 
-    private SessionManager sessionManager;
+    private BukkitSessionManager sessionManager;
     private BukkitConfigurationManager configuration;
     private BukkitRegionContainer regionContainer;
     private BukkitDebugHandler debugHandler;
@@ -138,6 +138,7 @@ public class BukkitWorldGuardPlatform implements WorldGuardPlatform {
         sessionManager = new BukkitSessionManager();
         configuration = new BukkitConfigurationManager(WorldGuardPlugin.inst());
         configuration.load();
+        sessionManager.setUsingTimings(configuration.timedSessionHandlers);
         regionContainer = new BukkitRegionContainer(WorldGuardPlugin.inst());
         regionContainer.initialize();
         debugHandler = new BukkitDebugHandler(WorldGuardPlugin.inst());
@@ -172,7 +173,6 @@ public class BukkitWorldGuardPlatform implements WorldGuardPlatform {
     @Override
     public void stackPlayerInventory(LocalPlayer localPlayer) {
         boolean ignoreMax = localPlayer.hasPermission("worldguard.stack.illegitimate");
-        boolean ignoreDamaged = localPlayer.hasPermission("worldguard.stack.damaged");
 
         Player player = ((BukkitPlayer) localPlayer).getPlayer();
 
@@ -206,12 +206,7 @@ public class BukkitWorldGuardPlatform implements WorldGuardPlatform {
                     }
 
                     // Same type?
-                    // Blocks store their color in the damage value
-                    if (item2.getType() == item.getType() &&
-                            (ignoreDamaged || item.getDurability() == item2.getDurability()) &&
-                            ((item.getItemMeta() == null && item2.getItemMeta() == null)
-                                    || (item.getItemMeta() != null &&
-                                    item.getItemMeta().equals(item2.getItemMeta())))) {
+                    if (item2.isSimilar(item)) {
                         // This stack won't fit in the parent stack
                         if (item2.getAmount() > needed) {
                             item.setAmount(max);
@@ -250,7 +245,7 @@ public class BukkitWorldGuardPlatform implements WorldGuardPlatform {
         List<ProfileService> services = new ArrayList<>();
         if (PaperLib.isPaper()) {
             // Paper has a shared cache
-            services.add(PaperProfileService.getInstance());
+            services.add(PaperPlayerService.getInstance());
         } else {
             services.add(BukkitPlayerService.getInstance());
         }

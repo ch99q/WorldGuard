@@ -105,6 +105,7 @@ public abstract class WorldConfiguration {
     public boolean blockEntityPaintingDestroy;
     public boolean blockEntityItemFrameDestroy;
     public boolean blockEntityArmorStandDestroy;
+    public boolean blockEntityVehicleEntry;
     public boolean blockPluginSpawning;
     public boolean blockGroundSlimes;
     public boolean blockZombieDoorDestruction;
@@ -135,6 +136,8 @@ public abstract class WorldConfiguration {
     public boolean removeInfiniteStacks;
     public boolean disableCreatureCropTrampling;
     public boolean disablePlayerCropTrampling;
+    public boolean disableCreatureTurtleEggTrampling;
+    public boolean disablePlayerTurtleEggTrampling;
     public boolean preventLightningFire;
     public Set<String> disallowedLightningBlocks;
     public boolean disableThunder;
@@ -158,6 +161,7 @@ public abstract class WorldConfiguration {
     public boolean disableEndermanGriefing;
     public boolean disableSnowmanTrails;
     public boolean disableSoilDehydration;
+    public boolean disableCoralBlockFade;
     public Set<String> allowedSnowFallOver;
     public boolean regionInvinciblityRemovesMobs;
     public boolean regionCancelEmptyChatEvents;
@@ -169,6 +173,8 @@ public abstract class WorldConfiguration {
     public boolean disableObsidianGenerators;
     public boolean strictEntitySpawn;
     public boolean ignoreHopperMoveEvents;
+    public boolean breakDeniedHoppers;
+    public boolean useMaxPriorityAssociation;
     protected Map<String, Integer> maxRegionCounts;
 
     /**

@@ -26,6 +26,7 @@ import com.sk89q.worldguard.domains.Association;
 import com.sk89q.worldguard.protection.association.RegionAssociable;
 import com.sk89q.worldguard.protection.flags.Flags;
 import com.sk89q.worldguard.protection.flags.Flag;
+import com.sk89q.worldguard.protection.flags.MapFlag;
 import com.sk89q.worldguard.protection.flags.RegionGroup;
 import com.sk89q.worldguard.protection.flags.StateFlag;
 import com.sk89q.worldguard.protection.flags.StateFlag.State;
@@ -89,13 +90,14 @@ public class FlagValueCalculator {
     /**
      * Return the membership status of the given subject, indicating
      * whether there are no (counted) regions in the list of regions,
-     * whether the subject is a member of all regions, or whether
-     * the region is not a member of all regions.
+     * whether the subject is a member of all (counted) regions, or
+     * whether the subject is not a member of all (counted) regions.
      *
      * <p>A region is "counted" if it doesn't have the
-     * {@link Flags#PASSTHROUGH} flag set to {@code ALLOW}. (The
-     * explicit purpose of the PASSTHROUGH flag is to have the region
-     * be skipped over in this check.)</p>
+     * {@link Flags#PASSTHROUGH} flag set to {@code ALLOW} and if
+     * there isn't another "counted" region with a higher priority.
+     * (The explicit purpose of the PASSTHROUGH flag is to have the
+     * region be skipped over in this check.)</p>
      *
      * <p>This method is mostly for internal use. It's not particularly
      * useful.</p>
@@ -112,11 +114,13 @@ public class FlagValueCalculator {
         Set<ProtectedRegion> ignoredRegions = Sets.newHashSet();
 
         for (ProtectedRegion region : getApplicable()) {
+            int priority = getPriority(region);
+
             // Don't consider lower priorities below minimumPriority
             // (which starts at Integer.MIN_VALUE). A region that "counts"
             // (has the flag set OR has members) will raise minimumPriority
             // to its own priority.
-            if (getPriority(region) < minimumPriority) {
+            if (priority < minimumPriority) {
                 break;
             }
 
@@ -129,7 +133,7 @@ public class FlagValueCalculator {
                 continue;
             }
 
-            minimumPriority = getPriority(region);
+            minimumPriority = priority;
 
             boolean member = RegionGroup.MEMBERS.contains(subject.getAssociation(Collections.singletonList(region)));
 
@@ -225,6 +229,112 @@ public class FlagValueCalculator {
     }
 
     /**
+     * Get the effective value for a key in a {@link MapFlag}. If there are multiple values
+     * (for example, if there are multiple regions with the same priority
+     * but with different farewell messages set, there would be multiple
+     * completing values), then the selected (or "winning") value will be undefined.
+     *
+     * <p>A subject can be provided that is used to determine whether the value
+     * of a flag on a particular region should be used. For example, if a
+     * flag's region group is set to {@link RegionGroup#MEMBERS} and the given
+     * subject is not a member, then the region would be skipped when
+     * querying that flag. If {@code null} is provided for the subject, then
+     * only flags that use {@link RegionGroup#ALL},
+     * {@link RegionGroup#NON_MEMBERS}, etc. will apply.</p>
+     *
+     * @param subject an optional subject, which would be used to determine the region group to apply
+     * @param flag the flag of type {@link MapFlag}
+     * @param key the key for the map flag
+     * @return a value, which could be {@code null}
+     */
+    @Nullable
+    public <V, K> V queryMapValue(@Nullable RegionAssociable subject, MapFlag<K, V> flag, K key, Flag<V> fallback) {
+        checkNotNull(flag);
+        checkNotNull(key);
+
+        Map<ProtectedRegion, V> consideredValues = new HashMap<>();
+        Map<ProtectedRegion, V> fallbackValues = new HashMap<>();
+        int minimumPriority = Integer.MIN_VALUE;
+        Set<ProtectedRegion> ignoredParents = new HashSet<>();
+
+        for(ProtectedRegion region : getApplicable()) {
+            int priority = getPriority(region);
+
+            if (priority < minimumPriority) {
+                break;
+            }
+
+            if (ignoredParents.contains(region)) {
+                continue;
+            }
+
+            V effectiveValue = getEffectiveMapValue(region, flag, key, subject);
+
+            if (effectiveValue != null) {
+                minimumPriority = priority;
+                consideredValues.put(region, effectiveValue);
+            } else if (fallback != null) {
+                effectiveValue = getEffectiveFlag(region, fallback, subject);
+                if (effectiveValue != null) {
+                    minimumPriority = priority;
+                    fallbackValues.put(region, effectiveValue);
+                }
+            }
+
+            addParents(ignoredParents, region);
+        }
+
+
+        if (consideredValues.isEmpty()) {
+            if (fallback != null && !fallbackValues.isEmpty()) {
+                return fallback.chooseValue(fallbackValues.values());
+            }
+            V defaultValue = flag.getValueFlag().getDefault();
+            return defaultValue != null ? defaultValue : fallback != null ? fallback.getDefault() : null;
+        }
+
+        return flag.getValueFlag().chooseValue(consideredValues.values());
+    }
+
+    @Nullable
+    private <V, K> V getEffectiveMapValue(ProtectedRegion region, MapFlag<K, V> mapFlag, K key, RegionAssociable subject) {
+        List<ProtectedRegion> seen = new ArrayList<>();
+        ProtectedRegion current = region;
+
+        while (current != null) {
+            seen.add(current);
+
+            Map<K, V> mapValue = current.getFlag(mapFlag);
+
+            if (mapValue != null && mapValue.containsKey(key)) {
+                boolean use = true;
+
+                if (mapFlag.getRegionGroupFlag() != null) {
+                    RegionGroup group = current.getFlag(mapFlag.getRegionGroupFlag());
+                    if (group == null) {
+                        group = mapFlag.getRegionGroupFlag().getDefault();
+                    }
+
+                    if (group == null) {
+                        use = false;
+                    } else if (subject == null) {
+                        use = group.contains(Association.NON_MEMBER);
+                    } else if (!group.contains(subject.getAssociation(seen))) {
+                        use = false;
+                    }
+                }
+
+                if (use) {
+                    return mapValue.get(key);
+                }
+            }
+
+            current = current.getParent();
+        }
+        return null;
+    }
+
+    /**
      * Get the effective values for a flag, returning a collection of all
      * values. It is up to the caller to determine which value, if any,
      * from the collection will be used.
@@ -283,7 +393,9 @@ public class FlagValueCalculator {
         Set<ProtectedRegion> ignoredParents = new HashSet<>();
 
         for (ProtectedRegion region : getApplicable()) {
-            if (getPriority(region) < minimumPriority) {
+            int priority = getPriority(region);
+
+            if (priority < minimumPriority) {
                 break;
             }
 
@@ -292,7 +404,6 @@ public class FlagValueCalculator {
             }
 
             V value = getEffectiveFlag(region, flag, subject);
-            int priority = getPriority(region);
 
             if (value != null) {
                 minimumPriority = priority;
@@ -310,7 +421,7 @@ public class FlagValueCalculator {
             // PASSTHROUGH is not set to ALLOW
             if (priority != minimumPriority && flag.implicitlySetWithMembership()
                     && getEffectiveFlag(region, Flags.PASSTHROUGH, subject) != State.ALLOW) {
-                minimumPriority = getPriority(region);
+                minimumPriority = priority;
             }
         }
 
