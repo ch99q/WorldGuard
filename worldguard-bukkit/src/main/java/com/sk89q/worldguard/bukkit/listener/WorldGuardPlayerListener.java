@@ -202,7 +202,8 @@ public class WorldGuardPlayerListener implements Listener {
             }
 
             if (!hostname.equals(hostKey)
-                    && !(cfg.hostKeysAllowFMLClients && hostname.equals(hostKey + "\u0000FML\u0000"))) {
+                    && !(cfg.hostKeysAllowFMLClients &&
+                            (hostname.equals(hostKey + "\u0000FML\u0000") || hostname.equals(hostKey + "\u0000FML2\u0000")))) {
                 event.disallow(PlayerLoginEvent.Result.KICK_OTHER,
                         "You did not join with the valid host key!");
                 log.warning("WorldGuard host key check: " +
@@ -313,13 +314,17 @@ public class WorldGuardPlayerListener implements Listener {
 
         Player player = event.getPlayer();
         Block block = event.getClickedBlock(); //not actually clicked but whatever
-        //int type = block.getTypeId();
+        Material type = block.getType();
         World world = player.getWorld();
 
         ConfigurationManager cfg = WorldGuard.getInstance().getPlatform().getGlobalStateManager();
         WorldConfiguration wcfg = cfg.get(BukkitAdapter.adapt(world));
 
-        if (block.getType() == Material.FARMLAND && wcfg.disablePlayerCropTrampling) {
+        if (type == Material.FARMLAND && wcfg.disablePlayerCropTrampling) {
+            event.setCancelled(true);
+            return;
+        }
+        if (type == Material.TURTLE_EGG && wcfg.disablePlayerTurtleEggTrampling) {
             event.setCancelled(true);
             return;
         }
@@ -388,7 +393,7 @@ public class WorldGuardPlayerListener implements Listener {
                         message = set.queryValue(localPlayer, Flags.ENTRY_DENY_MESSAGE);
                     }
                     if (cancel) {
-                        if (message != null) {
+                        if (message != null && !message.isEmpty()) {
                             player.sendMessage(message);
                         }
                         event.setCancelled(true);
@@ -407,7 +412,7 @@ public class WorldGuardPlayerListener implements Listener {
                         message = set.queryValue(localPlayer, Flags.ENTRY_DENY_MESSAGE);
                     }
                     if (cancel) {
-                        if (message != null) {
+                        if (message != null && !message.isEmpty()) {
                             player.sendMessage(message);
                         }
                         event.setCancelled(true);

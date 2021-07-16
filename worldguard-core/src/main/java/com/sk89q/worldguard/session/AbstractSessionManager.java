@@ -44,10 +44,13 @@ import com.sk89q.worldguard.session.handler.WeatherLockFlag;
 import javax.annotation.Nullable;
 import java.lang.ref.WeakReference;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiPredicate;
 import java.util.logging.Level;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -57,11 +60,14 @@ public abstract class AbstractSessionManager implements SessionManager {
     public static final int RUN_DELAY = 20;
     public static final long SESSION_LIFETIME = 10;
 
+    private static final BiPredicate<World, LocalPlayer> BYPASS_PERMISSION_TEST = (world, player) -> {
+        return player.hasPermission("worldguard.region.bypass." + world.getName());
+    };
+
     private final LoadingCache<WorldPlayerTuple, Boolean> bypassCache = CacheBuilder.newBuilder()
             .maximumSize(1000)
             .expireAfterWrite(2, TimeUnit.SECONDS)
-            .build(CacheLoader.from(tuple ->
-                    tuple.getPlayer().hasPermission("worldguard.region.bypass." + tuple.getWorld().getName())));
+            .build(CacheLoader.from(tuple -> BYPASS_PERMISSION_TEST.test(tuple.getWorld(), tuple.getPlayer())));
 
     private final LoadingCache<CacheKey, Session> sessions = CacheBuilder.newBuilder()
             .expireAfterAccess(SESSION_LIFETIME, TimeUnit.MINUTES)
@@ -69,6 +75,8 @@ public abstract class AbstractSessionManager implements SessionManager {
                     createSession(key.playerRef.get())));
 
     private boolean hasCustom = false;
+    // <original handler, wrapped handler>
+    private Map<Handler.Factory<? extends Handler>, Handler.Factory<? extends Handler>> wrappedHandlers = new HashMap<>();
     private List<Handler.Factory<? extends Handler>> handlers = new LinkedList<>();
 
     private static final List<Handler.Factory<? extends Handler>> defaultHandlers = new LinkedList<>();
@@ -102,20 +110,27 @@ public abstract class AbstractSessionManager implements SessionManager {
         return hasCustom;
     }
 
+    protected Handler.Factory<? extends Handler> wrapForRegistration(Handler.Factory<? extends Handler> factory) {
+        return factory;
+    }
+
     @Override
     public boolean registerHandler(Handler.Factory<? extends Handler> factory, @Nullable Handler.Factory<? extends Handler> after) {
         if (factory == null) return false;
         WorldGuard.logger.log(Level.INFO, "Registering session handler "
                 + factory.getClass().getEnclosingClass().getName());
         hasCustom = true;
+        Handler.Factory<? extends Handler> wrappedFactory = wrapForRegistration(factory);
         if (after == null) {
-            handlers.add(factory);
+            handlers.add(wrappedFactory);
         } else {
-            int index = handlers.indexOf(after);
+            Handler.Factory<? extends Handler> wrappedAfter = wrappedHandlers.get(after);
+            int index = handlers.indexOf(wrappedAfter != null ? wrappedAfter : after);
             if (index == -1) return false;
 
             handlers.add(index, factory); // shifts "after" right one, and everything after "after" right one
         }
+        wrappedHandlers.put(factory, wrappedFactory);
         return true;
     }
 
@@ -127,6 +142,7 @@ public abstract class AbstractSessionManager implements SessionManager {
         } else {
             WorldGuard.logger.log(Level.INFO, "Unregistering session handler "
                     + factory.getClass().getEnclosingClass().getName());
+            factory = wrappedHandlers.remove(factory);
         }
         return handlers.remove(factory);
     }
@@ -134,8 +150,15 @@ public abstract class AbstractSessionManager implements SessionManager {
     @Override
     public boolean hasBypass(LocalPlayer player, World world) {
         Session sess = getIfPresent(player);
-        return sess != null && !sess.hasBypassDisabled()
-                && bypassCache.getUnchecked(new WorldPlayerTuple(world, player));
+        if (sess == null || sess.hasBypassDisabled()) {
+            return false;
+        }
+
+        if (WorldGuard.getInstance().getPlatform().getGlobalStateManager().disablePermissionCache) {
+            return BYPASS_PERMISSION_TEST.test(world, player);
+        }
+
+        return bypassCache.getUnchecked(new WorldPlayerTuple(world, player));
     }
 
     @Override

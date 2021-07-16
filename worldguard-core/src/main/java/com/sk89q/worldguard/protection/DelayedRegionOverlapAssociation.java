@@ -21,16 +21,8 @@ package com.sk89q.worldguard.protection;
 
 import com.sk89q.worldedit.util.Location;
 import com.sk89q.worldguard.protection.regions.RegionQuery;
-import com.sk89q.worldguard.domains.Association;
-import com.sk89q.worldguard.protection.ApplicableRegionSet;
-import com.sk89q.worldguard.protection.association.RegionAssociable;
-import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 
-import javax.annotation.Nullable;
 import java.util.List;
-import java.util.Set;
-
-import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * Determines that the association to a region is {@code OWNER} if the input
@@ -38,41 +30,18 @@ import static com.google.common.base.Preconditions.checkNotNull;
  *
  * <p>This class only performs a spatial query if its
  * {@link #getAssociation(List)} method is called.</p>
+ *
+ * @deprecated Use {@link com.sk89q.worldguard.protection.association.DelayedRegionOverlapAssociation} instead. This class is mis-packaged.
  */
-public class DelayedRegionOverlapAssociation implements RegionAssociable {
-
-    private final RegionQuery query;
-    private final Location location;
-    @Nullable
-    private Set<ProtectedRegion> source;
-
+@Deprecated
+public class DelayedRegionOverlapAssociation extends com.sk89q.worldguard.protection.association.DelayedRegionOverlapAssociation {
     /**
      * Create a new instance.
-     *
      * @param query the query
      * @param location the location
      */
     public DelayedRegionOverlapAssociation(RegionQuery query, Location location) {
-        checkNotNull(query);
-        checkNotNull(location);
-        this.query = query;
-        this.location = location;
-    }
-
-    @Override
-    public Association getAssociation(List<ProtectedRegion> regions) {
-        if (source == null) {
-            ApplicableRegionSet result = query.getApplicableRegions(location);
-            source = result.getRegions();
-        }
-
-        for (ProtectedRegion region : regions) {
-            if ((region.getId().equals(ProtectedRegion.GLOBAL_REGION) && source.isEmpty()) || source.contains(region)) {
-                return Association.OWNER;
-            }
-        }
-
-        return Association.NON_MEMBER;
+        super(query, location, false);
     }
 
 }

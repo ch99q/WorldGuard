@@ -47,6 +47,7 @@ import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.Enderman;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.FallingBlock;
 import org.bukkit.entity.Fireball;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.ItemFrame;
@@ -81,6 +82,7 @@ import org.bukkit.event.entity.ExplosionPrimeEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.entity.PigZapEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.vehicle.VehicleEnterEvent;
 import org.bukkit.event.world.PortalCreateEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.projectiles.ProjectileSource;
@@ -120,11 +122,13 @@ public class WorldGuardEntityListener implements Listener {
         ConfigurationManager cfg = WorldGuard.getInstance().getPlatform().getGlobalStateManager();
         WorldConfiguration wcfg = cfg.get(BukkitAdapter.adapt(entity.getWorld()));
 
-        if (block.getType() == Material.FARMLAND) {
-            if (/* entity instanceof Creature && // catch for any entity (not thrown for players) */
-                wcfg.disableCreatureCropTrampling) {
-                event.setCancelled(true);
-            }
+        if (block.getType() == Material.FARMLAND && wcfg.disableCreatureCropTrampling) {
+            event.setCancelled(true);
+            return;
+        }
+        if (block.getType() == Material.TURTLE_EGG && wcfg.disableCreatureTurtleEggTrampling) {
+            event.setCancelled(true);
+            return;
         }
     }
 
@@ -806,7 +810,19 @@ public class WorldGuardEntityListener implements Listener {
 
         ConfigurationManager cfg = WorldGuard.getInstance().getPlatform().getGlobalStateManager();
         WorldConfiguration wcfg = cfg.get(BukkitAdapter.adapt(ent.getWorld()));
-        if (ent instanceof Enderman) {
+        if (ent instanceof FallingBlock) {
+            Material id = event.getBlock().getType();
+
+            if (id == Material.GRAVEL && wcfg.noPhysicsGravel) {
+                event.setCancelled(true);
+                return;
+            }
+
+            if (id == Material.SAND && wcfg.noPhysicsSand) {
+                event.setCancelled(true);
+                return;
+            }
+        } else if (ent instanceof Enderman) {
             if (wcfg.disableEndermanGriefing) {
                 event.setCancelled(true);
                 return;
@@ -827,6 +843,16 @@ public class WorldGuardEntityListener implements Listener {
                 event.setCancelled(true);
                 return;
             }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onVehicleEnter(VehicleEnterEvent event) {
+        ConfigurationManager cfg = WorldGuard.getInstance().getPlatform().getGlobalStateManager();
+        WorldConfiguration wcfg = cfg.get(BukkitAdapter.adapt(event.getEntered().getWorld()));
+
+        if (wcfg.blockEntityVehicleEntry && !(event.getEntered() instanceof Player)) {
+            event.setCancelled(true);
         }
     }
 

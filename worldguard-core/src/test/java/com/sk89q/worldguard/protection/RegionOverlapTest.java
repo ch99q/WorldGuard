@@ -19,14 +19,12 @@
 
 package com.sk89q.worldguard.protection;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
 import com.sk89q.worldedit.math.BlockVector2;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldguard.TestPlayer;
 import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.domains.DefaultDomain;
+import com.sk89q.worldguard.protection.association.RegionOverlapAssociation;
 import com.sk89q.worldguard.protection.flags.Flags;
 import com.sk89q.worldguard.protection.flags.StateFlag;
 import com.sk89q.worldguard.protection.flags.registry.FlagRegistry;
@@ -35,12 +33,20 @@ import com.sk89q.worldguard.protection.regions.GlobalProtectedRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedPolygonalRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class RegionOverlapTest {
     static String COURTYARD_ID = "courtyard";
     static String FOUNTAIN_ID = "fountain";
@@ -59,13 +65,21 @@ public abstract class RegionOverlapTest {
     TestPlayer player1;
     TestPlayer player2;
 
+   /* @Parameterized.Parameters(name = "{index}: useMaxPrio = {0}")
+    public static Iterable<Object[]> params() {
+        return Arrays.asList(new Object[][]{{true}, {false}});
+    }*/
+
+
+    // public boolean useMaxPriorityAssociation;
+
     protected FlagRegistry getFlagRegistry() {
         return WorldGuard.getInstance().getFlagRegistry();
     }
     
     protected abstract RegionManager createRegionManager() throws Exception;
 
-    @Before
+    @BeforeAll
     public void setUp() throws Exception {
         setUpGlobalRegion();
         
@@ -104,6 +118,7 @@ public abstract class RegionOverlapTest {
         ProtectedRegion region = new ProtectedPolygonalRegion(COURTYARD_ID, points, 0, 10);
 
         region.setOwners(domain);
+        region.setPriority(5);
         manager.addRegion(region);
 
         courtyard = region;
@@ -116,6 +131,7 @@ public abstract class RegionOverlapTest {
         ProtectedRegion region = new ProtectedCuboidRegion(FOUNTAIN_ID,
                 BlockVector3.ZERO, BlockVector3.at(5, 5, 5));
         region.setMembers(domain);
+        region.setPriority(10);
         manager.addRegion(region);
 
         fountain = region;
@@ -168,10 +184,6 @@ public abstract class RegionOverlapTest {
     public void testPlayer2BuildAccess() {
         ApplicableRegionSet appl;
 
-        HashSet<ProtectedRegion> test = new HashSet<>();
-        test.add(courtyard);
-        test.add(fountain);
-
         // Outside
         appl = manager.getApplicableRegions(outside);
         assertTrue(appl.testState(player2, Flags.BUILD));
@@ -181,5 +193,65 @@ public abstract class RegionOverlapTest {
         // Inside fountain
         appl = manager.getApplicableRegions(inFountain);
         assertTrue(appl.testState(player2, Flags.BUILD));
+    }
+
+    @ParameterizedTest(name = "useMaxPriorityAssociation={0}")
+    @ValueSource(booleans = { false, true })
+    public void testNonPlayerBuildAccessInOneRegion(boolean useMaxPriorityAssociation) {
+        ApplicableRegionSet appl;
+
+        HashSet<ProtectedRegion> source = new HashSet<>();
+        source.add(courtyard);
+        RegionOverlapAssociation assoc = new RegionOverlapAssociation(source, useMaxPriorityAssociation);
+
+        // Outside
+        appl = manager.getApplicableRegions(outside);
+        assertTrue(appl.testState(assoc, Flags.BUILD));
+        // Inside courtyard
+        appl = manager.getApplicableRegions(inCourtyard);
+        assertTrue(appl.testState(assoc, Flags.BUILD));
+        // Inside fountain
+        appl = manager.getApplicableRegions(inFountain);
+        assertFalse(appl.testState(assoc, Flags.BUILD));
+    }
+
+    @ParameterizedTest(name = "useMaxPriorityAssociation={0}")
+    @ValueSource(booleans = { false, true })
+    public void testNonPlayerBuildAccessInBothRegions(boolean useMaxPriorityAssociation) {
+        ApplicableRegionSet appl;
+
+        HashSet<ProtectedRegion> source = new HashSet<>();
+        source.add(fountain);
+        source.add(courtyard);
+        RegionOverlapAssociation assoc = new RegionOverlapAssociation(source, useMaxPriorityAssociation);
+
+        // Outside
+        appl = manager.getApplicableRegions(outside);
+        assertTrue(appl.testState(assoc, Flags.BUILD));
+        // Inside courtyard
+        appl = manager.getApplicableRegions(inCourtyard);
+        assertTrue(useMaxPriorityAssociation ^ appl.testState(assoc, Flags.BUILD));
+        // Inside fountain
+        appl = manager.getApplicableRegions(inFountain);
+        assertTrue(appl.testState(assoc, Flags.BUILD));
+    }
+
+    @ParameterizedTest(name = "useMaxPriorityAssociation={0}")
+    @ValueSource(booleans = { false, true })
+    public void testNonPlayerBuildAccessInNoRegions(boolean useMaxPriorityAssociation) {
+        ApplicableRegionSet appl;
+
+        HashSet<ProtectedRegion> source = new HashSet<>();
+        RegionOverlapAssociation assoc = new RegionOverlapAssociation(source, useMaxPriorityAssociation);
+
+        // Outside
+        appl = manager.getApplicableRegions(outside);
+        assertTrue(appl.testState(assoc, Flags.BUILD));
+        // Inside courtyard
+        appl = manager.getApplicableRegions(inCourtyard);
+        assertFalse(appl.testState(assoc, Flags.BUILD));
+        // Inside fountain
+        appl = manager.getApplicableRegions(inFountain);
+        assertFalse(appl.testState(assoc, Flags.BUILD));
     }
 }

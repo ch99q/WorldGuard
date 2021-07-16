@@ -25,7 +25,6 @@ import com.google.common.collect.Sets;
 import com.sk89q.minecraft.util.commands.Command;
 import com.sk89q.minecraft.util.commands.CommandContext;
 import com.sk89q.minecraft.util.commands.CommandException;
-import com.sk89q.minecraft.util.commands.CommandPermissions;
 import com.sk89q.minecraft.util.commands.CommandPermissionsException;
 import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.command.util.AsyncCommandBuilder;
@@ -44,7 +43,6 @@ import com.sk89q.worldedit.util.formatting.text.format.TextDecoration;
 import com.sk89q.worldedit.world.World;
 import com.sk89q.worldguard.LocalPlayer;
 import com.sk89q.worldguard.WorldGuard;
-import com.sk89q.worldguard.commands.CommandUtils;
 import com.sk89q.worldguard.commands.task.RegionAdder;
 import com.sk89q.worldguard.commands.task.RegionLister;
 import com.sk89q.worldguard.commands.task.RegionManagerLoader;
@@ -645,7 +643,7 @@ public final class RegionCommands extends RegionCommandsBase {
         ProtectedRegion region;
         if (args.argsLength() == 0) { // Get region from where the player is
             if (!(sender instanceof LocalPlayer)) {
-                throw new CommandException("Please specify the region with /region info -w world_name region_name.");
+                throw new CommandException("Please specify the region with /region flags -w world_name region_name.");
             }
 
             region = checkRegionStandingIn(manager, (LocalPlayer) sender, true,
@@ -1111,18 +1109,39 @@ public final class RegionCommands extends RegionCommandsBase {
             }
         }
 
+        String message = existing.getFlag(Flags.TELE_MESSAGE);
+
+        // If the flag isn't set, use the default message
+        // If message.isEmpty(), no message is sent by LocalPlayer#teleport(...)
+        if (message == null) {
+            message = Flags.TELE_MESSAGE.getDefault();
+        }
+
         player.teleport(teleportLocation,
-                "Teleported you to the region '" + existing.getId() + "'.",
+                message.replace("%id%", existing.getId()),
                 "Unable to teleport to region '" + existing.getId() + "'.");
     }
 
     @Command(aliases = {"toggle-bypass", "bypass"},
+             usage = "[on|off]",
              desc = "Toggle region bypassing, effectively ignoring bypass permissions.")
-    @CommandPermissions({"worldguard.region.toggle-bypass"})
     public void toggleBypass(CommandContext args, Actor sender) throws CommandException {
         LocalPlayer player = worldGuard.checkPlayer(sender);
+        if (!player.hasPermission("worldguard.region.toggle-bypass")) {
+            throw new CommandPermissionsException();
+        }
         Session session = WorldGuard.getInstance().getPlatform().getSessionManager().get(player);
-        if (session.hasBypassDisabled()) {
+        boolean shouldEnableBypass;
+        if (args.argsLength() > 0) {
+            String arg1 = args.getString(0);
+            if (!arg1.equalsIgnoreCase("on") && !arg1.equalsIgnoreCase("off")) {
+                throw new CommandException("Allowed optional arguments are: on, off");
+            }
+            shouldEnableBypass = arg1.equalsIgnoreCase("on");
+        } else {
+            shouldEnableBypass = session.hasBypassDisabled();
+        }
+        if (shouldEnableBypass) {
             session.setBypassDisabled(false);
             player.print("You are now bypassing region protection (as long as you have permission).");
         } else {
